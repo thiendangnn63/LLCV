@@ -1,0 +1,8 @@
+build/
+*.pgm
+*.ppm
+!data/*.pgm
+!data/*.ppm
+CLAUDE.md
+tools/venv/
+__pycache__/
