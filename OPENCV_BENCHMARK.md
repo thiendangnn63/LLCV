@@ -31,6 +31,8 @@ Measured on 2026-10-18.
 
 Times in ms. "LLCV slower by" compares against single-threaded OpenCV, since LLCV is single-threaded too.
 
+> **Stale:** the `canny` rows (timings and accuracy) were measured before the rewrite that merged non-maximum suppression and thresholding into one pass and dropped `thinMap`. Re-run the benchmark to update them.
+
 ### 640×480 photo
 
 | Function | LLCV | OpenCV, 1 thread | OpenCV, 16 threads | LLCV slower by |
@@ -79,7 +81,7 @@ Based on how OpenCV is implemented. None of these were profiled here.
 
 - **Hand-written SIMD.** OpenCV picks AVX2 code paths at runtime. LLCV relies on auto-vectorization at `-O2` with no `-march`. The interleaved RGB loop in `to_grayscale` in particular doesn't auto-vectorize.
 - **Integer arithmetic on 8-bit images.** OpenCV's 8-bit blur works in 16-bit fixed point, so twice as many values fit in each SIMD register as with float, and no full-size float temporary image is needed.
-- **Fewer full-size temporaries.** LLCV's Sobel runs two full `convolve_1D` passes, each with its own float temporary image. Canny additionally builds the full-size `mMap` and `thinMap`. OpenCV's Canny works on 16-bit integer gradients and processes the image in row buffers.
+- **Fewer full-size temporaries.** LLCV's Sobel runs two full `convolve_1D` passes, each with its own float temporary image. Canny additionally builds the full-size squared-magnitude map `mMap`. OpenCV's Canny works on 16-bit integer gradients and processes the image in row buffers.
 - **Threading.** Blur and Canny gain another 1.4-2.9× from 16 threads. Sobel barely changes, which suggests it is limited by memory bandwidth rather than computation.
 
 ---

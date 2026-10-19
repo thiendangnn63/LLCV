@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <stack>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -13,8 +12,6 @@ namespace llcv {
     // ---------------------------------------------------------------------------
 
     // change image to grayscale
-    // BT.601 luma weights scaled to integers: 77 + 150 + 29 = 256, so >> 8 divides by 256.
-    // the +128 makes the shift round to nearest instead of truncating.
     Image to_grayscale(const Image& src) {
         if (src.channels == 1) return src;
         if (src.channels != 3) throw std::invalid_argument("to_grayscale: expected 1 or 3 channels");
@@ -37,7 +34,8 @@ namespace llcv {
     // ---------------------------------------------------------------------------
 
     // return enum to indicate kernel type
-    KernelType kernel_type(const std::vector<float>& kernel) {
+    template <typename T>
+    KernelType kernel_type(const std::vector<T>& kernel) {
         const int ks = kernel.size();
         if (ks == 0 || ks % 2 == 0) return KernelType::General;
 
@@ -46,12 +44,12 @@ namespace llcv {
         bool anti = true;
 
         for (int i = 0; i < kr; i++) {
-            float p1 = kernel[i];
-            float p2 = kernel[ks - i - 1];
+            T p1 = kernel[i];
+            T p2 = kernel[ks - i - 1];
             if (p1 != p2) sym = false;
             if (p1 != -p2) anti = false;
         }
-        if (kernel[kr] != 0.0f) anti = false;
+        if (kernel[kr] != T(0)) anti = false;
 
         if (sym) return KernelType::Symmetric;
         if (anti) return KernelType::Antisymmetric;
@@ -60,17 +58,22 @@ namespace llcv {
     
     // these helper functions apply things based on kernel type
     // idk what da fuck im doing gang
-    static void symmetric_helper(float* dst, const float* A, const float* B, float weight, size_t length) {
+    template <typename T>
+    static void symmetric_helper(T* dst, const T* A, const T* B, T weight, size_t length) {
         for (size_t x = 0; x < length; ++x) {
             dst[x] += (A[x] + B[x]) * weight;
         }
     }
-    static void antisymmetric_helper(float* dst, const float* A, const float* B, float weight, size_t length) {
+
+    template <typename T>
+    static void antisymmetric_helper(T* dst, const T* A, const T* B, T weight, size_t length) {
         for (size_t x = 0; x < length; ++x) {
             dst[x] += (A[x] - B[x]) * weight;
         }
     }
-    static void general_helper(float* dst, const float* A, float weight, size_t length) {
+
+    template <typename T>
+    static void general_helper(T* dst, const T* A, T weight, size_t length) {
         for (size_t x = 0; x < length; ++x) {
             dst[x] += A[x] * weight;
         }
@@ -79,7 +82,8 @@ namespace llcv {
     // apply convolution to image in two stages
     // time complexity: width * height * channels * 2k
     // only valid for separable kernels, i.e. 2D kernels that are the outer product of two 1D kernels
-    floatImage convolve_1D(const Image& src, const std::vector<float>& horizontal, const std::vector<float>& vertical) {
+    template <typename T>
+    ImageT<T> convolve_1D(const Image& src, const std::vector<T>& horizontal, const std::vector<T>& vertical) {
         int hSize = horizontal.size();
         int vSize = vertical.size();
 
@@ -91,17 +95,17 @@ namespace llcv {
         const int C = src.channels;
         const size_t ROW_LEN = static_cast<size_t>(W) * C;
         
-        floatImage imgFloat (W, H, C);
-        floatImage dst (W, H, C);
+        ImageT<T> rowPass (W, H, C);
+        ImageT<T> dst (W, H, C);
 
         const int hr = hSize / 2;
         const int vr = vSize / 2;
 
-        float* base = imgFloat.floatMap.data();
-        std::vector<float> scratch ((W + 2 * hr) * C);
+        T* base = rowPass.data.data();
+        std::vector<T> scratch ((W + 2 * hr) * C);
         for (int y = 0; y < H; ++y) {
             const uint8_t* sourceRow = src.data.data() + y * ROW_LEN;
-            float* destRow = base + y * ROW_LEN;
+            T* destRow = base + y * ROW_LEN;
 
             for (int i = 0; i < hr; i++) {
                 for (int j = 0; j < C; j++) {
@@ -118,18 +122,18 @@ namespace llcv {
             // im not getting that internship
             if (hType == KernelType::General) {
                 for (int i = 0; i < hSize; i++) {
-                    float multiplier = horizontal[i];
+                    T multiplier = horizontal[i];
                     general_helper(destRow, scratch.data() + i * C, multiplier, ROW_LEN);
                 }
             }
             else {
                 for (int i = 0; i < hr; i++) {
-                    float multiplier = horizontal[i];
+                    T multiplier = horizontal[i];
                     if (hType == KernelType::Symmetric) symmetric_helper(destRow, scratch.data() + i * C, scratch.data() + (hSize - 1 - i) * C, multiplier, ROW_LEN);
                     else if (hType == KernelType::Antisymmetric) antisymmetric_helper(destRow, scratch.data() + i * C, scratch.data() + (hSize - 1 - i) * C, multiplier, ROW_LEN);                    
                 }
                 if (hType == KernelType::Symmetric) {
-                    float midmul = horizontal[hr];
+                    T midmul = horizontal[hr];
                     for (size_t x = 0; x < ROW_LEN; ++x) {
                         destRow[x] += scratch[x + hr * C] * midmul;
                     }
@@ -137,9 +141,9 @@ namespace llcv {
             }
         }
 
-        float* dp = dst.floatMap.data();
+        T* dp = dst.data.data();
         for (int y = 0; y < H; ++y) {
-            float* destRow = dp + y * ROW_LEN;
+            T* destRow = dp + y * ROW_LEN;
 
             if (vType == KernelType::General) {
                 for (int i = 0; i < vSize; i++) {
@@ -147,8 +151,8 @@ namespace llcv {
                     ny = ny < 0 ? 0 : ny;
                     ny = ny > H - 1 ? H - 1 : ny;
                     
-                    const float* sourceRow = base + ny * ROW_LEN;
-                    float multiplier = vertical[i];
+                    const T* sourceRow = base + ny * ROW_LEN;
+                    T multiplier = vertical[i];
 
                     general_helper(destRow, sourceRow, multiplier, ROW_LEN);
                 }
@@ -161,9 +165,9 @@ namespace llcv {
                     int my = y + vr - i;
                     my = my > H - 1 ? H - 1 : my;
 
-                    const float* sourceRow = base + ny * ROW_LEN;
-                    const float* mirrorRow = base + my * ROW_LEN;
-                    float multiplier = vertical[i];
+                    const T* sourceRow = base + ny * ROW_LEN;
+                    const T* mirrorRow = base + my * ROW_LEN;
+                    T multiplier = vertical[i];
 
                     if (vType == KernelType::Symmetric) {
                         symmetric_helper(destRow, sourceRow, mirrorRow, multiplier, ROW_LEN);
@@ -173,14 +177,21 @@ namespace llcv {
                     }
                 }
                 if (vType == KernelType::Symmetric) {
-                    float midmul = vertical[vr];
+                    T midmul = vertical[vr];
                     general_helper(destRow, base + y * ROW_LEN, midmul, ROW_LEN);
                 }
             }
         }
         return dst;
     }
-    
+
+    // templates live in this file, so every type used elsewhere needs an explicit instantiation here
+    template KernelType kernel_type<float>(const std::vector<float>& kernel);
+    template KernelType kernel_type<int16_t>(const std::vector<int16_t>& kernel);
+    template floatImage convolve_1D<float>(const Image& src, const std::vector<float>& horizontal, const std::vector<float>& vertical);
+    // int16_t overflows for Sobel radius >= 3: worst case 255 * 64 * 12 = 195840 > 32767
+    template int16Image convolve_1D<int16_t>(const Image& src, const std::vector<int16_t>& horizontal, const std::vector<int16_t>& vertical);
+
     // ---------------------------------------------------------------------------
     // Float -> 8-bit conversion
     // ---------------------------------------------------------------------------
@@ -192,7 +203,7 @@ namespace llcv {
         const int W = blurMap.width;
         const int H = blurMap.height;
         const int C = blurMap.channels;
-        const float* base = blurMap.floatMap.data();
+        const float* base = blurMap.data.data();
         const size_t SIZE = static_cast<size_t>(H) * W * C;
 
         Image dst (W, H, C);
@@ -211,6 +222,7 @@ namespace llcv {
 
     // get gaussian blur kernel
     std::vector<float> gaussian_kernel_1D(const float sigma) {
+        if (!(sigma > 0)) throw std::invalid_argument("gaussian_kernel_1D: sigma must be > 0");
         int radius = std::ceil(sigma * 3);
         int kernelSize = radius * 2 + 1;
 
@@ -308,11 +320,11 @@ namespace llcv {
         const int H = horizontal.height;
         const int C = horizontal.channels;
         const size_t SIZE = static_cast<size_t>(W) * H * C;
-        const float* hp = horizontal.floatMap.data();
-        const float* vp = vertical.floatMap.data();
+        const float* hp = horizontal.data.data();
+        const float* vp = vertical.data.data();
 
         floatImage dst (W, H, C);
-        float* dp = dst.floatMap.data();
+        float* dp = dst.data.data();
 
         float runningMax = 0.0f;
         for (size_t i = 0; i < SIZE; i++) {
@@ -340,7 +352,7 @@ namespace llcv {
 
         const size_t SIZE = static_cast<size_t>(W) * H * C;
         const float multiplier = 255.0f / maxValue;
-        const float* base = dst.floatMap.data();
+        const float* base = dst.data.data();
 
         Image sobelImage (W, H, C);
         uint8_t* sp = sobelImage.data.data();
@@ -357,125 +369,9 @@ namespace llcv {
     // Canny Edge
     // ---------------------------------------------------------------------------
 
-    // canny edge detection (UNOPTIMIZED)
-    Image canny_atan2(const Image& src, const int radius, float highThres, float lowThres) {
-        if (src.channels != 1) throw std::invalid_argument("canny: canny only accepts 1-channel images");
-        const int W = src.width;
-        const int H = src.height;
-        const int C = src.channels;
-
-        floatImage dx = sobel_horizontal(src, radius);
-        floatImage dy = sobel_vertical(src, radius);
-        floatImage mMap (W, H, C);
-        floatImage dMap (W, H, C);
-        
-        float PI = 4.0 * std::atan(1.0);
-        float runningMax = 0.0f;
-
-        for (int i = 0; i < H; i++) {
-            for (int j = 0; j < W; j++) {
-                for (int k = 0; k < C; k++) {
-                    float gx = dx.at(j, i, k);
-                    float gy = dy.at(j, i, k);
-                    float magnitude = std::hypot(gx, gy);
-
-                    runningMax = std::max(magnitude, runningMax);
-
-                    float angle = std::atan2(gy, gx) * 180 / PI;
-                    angle = angle < 0 ? angle + 180 : angle;
-
-                    mMap.at(j, i, k) = magnitude;
-                    dMap.at(j, i, k) = angle;
-                }
-            }
-        }
-        
-        if (runningMax == 0) return Image(W, H, C);
-
-        // float highThres = runningMax * 0.2;
-        // float lowThres = highThres * 0.5;
-        floatImage thinMap (W, H, C);
-
-        const int offx[] = {0, 1, 1, -1};
-        const int offy[] = {1, 1, 0, 1};
-        for (int i = 1; i < H - 1; i++) {
-            for (int j = 1; j < W - 1; j++) {
-                for (int k = 0; k < C; k++) {
-                    float angle = dMap.at(j, i, k);
-                    int bin = std::lround(angle / 45) % 4;
-                    
-                    float base = mMap.at(j, i, k);
-                    float neighbor1 = mMap.at(j + offy[bin], i + offx[bin], k);
-                    float neighbor2 = mMap.at(j - offy[bin], i - offx[bin], k);
-                    if (base >= neighbor1 && base >= neighbor2) thinMap.at(j, i, k) = base;
-                }
-            }
-        }
-
-        Image dst (W, H, C);
-        std::stack<std::pair<int, int>> st;
-        std::stack<std::pair<int, int>> st_mid;
-        const int LOW = 0;
-        const int MID = 75;
-        const int HIGH = 255;
-
-        for (int i = 0; i < H; i++) {
-            for (int j = 0; j < W; j++) {
-                for (int k = 0; k < C; k++) {
-                    float current = thinMap.at(j, i, k);
-                    if (current >= highThres) {
-                        dst.at(j, i, k) = HIGH;
-                        st.push({j, i});
-                    }
-                    else if (current < lowThres) {
-                        dst.at(j, i, k) = LOW;
-                    }
-                    else {
-                        dst.at(j, i, k) = MID;
-                        st_mid.push({j, i});
-                    }
-                }
-            }
-        }
-
-        std::pair<int, int> cur;
-        while (!st.empty()) {
-            cur = st.top();
-            st.pop();
-            int cx = cur.first;
-            int cy = cur.second;
-            
-            for (int i = 0; i < 4; i++) {
-                int nx1 = cx + offx[i];
-                int ny1 = cy + offy[i];
-                int nx2 = cx - offx[i];
-                int ny2 = cy - offy[i];
-
-                if (dst.at(nx1, ny1, 0) == MID) {
-                    dst.at(nx1, ny1, 0) = HIGH;
-                    st.push({nx1, ny1});
-                }
-                if (dst.at(nx2, ny2, 0) == MID) {
-                    dst.at(nx2, ny2, 0) = HIGH;
-                    st.push({nx2, ny2});
-                }
-            }
-        }
-
-        while (!st_mid.empty()) {
-            cur = st_mid.top();
-            st_mid.pop();
-            int cx = cur.first;
-            int cy = cur.second;
-            
-            if (dst.at(cx, cy, 0) == MID) {
-                dst.at(cx, cy, 0) = LOW;
-            }
-        }
-
-        return dst;
-    }
-
+    // canny edge algorithm
+    // less noisy than sobel
+    // idk how to explain it better
     Image canny(const Image& src, const int radius, float highThres, float lowThres) {
         if (highThres <= 0 || lowThres <= 0) throw std::invalid_argument("canny: threshold must be > 0");
         if (src.channels != 1) throw std::invalid_argument("canny: canny only accepts 1-channel images");
@@ -492,40 +388,12 @@ namespace llcv {
         floatImage dy = sobel_vertical(src, radius);
         floatImage mMap (W, H, C);
 
-        const float* px = dx.floatMap.data();
-        const float* py = dy.floatMap.data();
-        float* pm = mMap.floatMap.data();
-        float runningMax = 0.0f;
-        
+        const float* px = dx.data.data();
+        const float* py = dy.data.data();
+        float* pm = mMap.data.data();
+
         for (size_t i = 0; i < SIZE; i++) {
-            pm[i] = std::sqrt(px[i] * px[i] + py[i] * py[i]);
-            runningMax = std::max(pm[i], runningMax);
-        }
-        
-        if (runningMax == 0) return Image(W, H, C);
-
-        floatImage thinMap (W, H, C);
-        float* tp = thinMap.floatMap.data();
-
-        const int offx[] = {0, 1, 1, -1};
-        const int offy[] = {1, 1, 0, 1};
-        for (int i = 1; i < H - 1; i++) {
-            for (int j = 1; j < W - 1; j++) {
-                size_t idx = i * W + j;
-                float gy = py[idx];
-                float gx = px[idx];
-                int bin = 3;
-
-                if (std::abs(gy) < tan225 * std::abs(gx)) bin = 0;
-                else if (std::abs(gy) > tan675 * std::abs(gx)) bin = 2;
-                else if (gx * gy > 0) bin = 1;
-
-                float base = pm[idx];
-                float n1 = pm[(i + offx[bin]) * W + (j + offy[bin])];
-                float n2 = pm[(i - offx[bin]) * W + (j - offy[bin])];
-
-                if (base >= n1 && base >= n2) tp[idx] = base;
-            }
+            pm[i] = px[i] * px[i] + py[i] * py[i];
         }
 
         Image dst (W, H, C);
@@ -536,17 +404,31 @@ namespace llcv {
         const int LOW = 0;
         const int MID = 75;
         const int HIGH = 255;
+        // neighbor offsets per direction bin: offy moves along rows (i), offx along columns (j)
+        const int offy[] = {0, 1, 1, -1};
+        const int offx[] = {1, 1, 0, 1};
 
-        for (int i = 0; i < H; i++) {
-            for (int j = 0; j < W; j++) {
-                int idx = i * W + j;
-                float current = tp[idx];
-                if (current >= highThres) {
+        for (int i = 1; i < H - 1; i++) {
+            for (int j = 1; j < W - 1; j++) {
+                size_t idx = i * W + j;
+                float base = pm[idx];
+                if (base < lowThres * lowThres) continue;
+
+                float gy = py[idx];
+                float gx = px[idx];
+                int bin = 3;
+
+                if (std::abs(gy) < tan225 * std::abs(gx)) bin = 0;
+                else if (std::abs(gy) > tan675 * std::abs(gx)) bin = 2;
+                else if (gx * gy > 0) bin = 1;
+
+                float n1 = pm[(i + offy[bin]) * W + (j + offx[bin])];
+                float n2 = pm[(i - offy[bin]) * W + (j - offx[bin])];
+
+                if (base < n1 || base < n2) continue;
+                if (base >= highThres * highThres) {
                     pd[idx] = HIGH;
                     st.push_back(idx);
-                }
-                else if (current < lowThres) {
-                    pd[idx] = LOW;
                 }
                 else {
                     pd[idx] = MID;
@@ -555,10 +437,10 @@ namespace llcv {
         }
 
         int offset[] = {
-            offx[0] * W + offy[0],
-            offx[1] * W + offy[1],
-            offx[2] * W + offy[2],
-            offx[3] * W + offy[3]
+            offy[0] * W + offx[0],
+            offy[1] * W + offx[1],
+            offy[2] * W + offx[2],
+            offy[3] * W + offx[3]
         };
         
         int idx;

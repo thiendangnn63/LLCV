@@ -4,8 +4,14 @@ CPPFLAGS += -Iinclude -MMD -MP
 # Static runtime: avoids picking up a mismatched libstdc++-6.dll from PATH (e.g. Git's).
 LDFLAGS  ?= -static
 
-BUILD := build
-EXE   := $(if $(filter Windows_NT,$(OS)),.exe)
+# `make debug` builds into its own folder so -O0 and -O3 objects never mix.
+ifneq ($(filter debug,$(MAKECMDGOALS)),)
+  BUILD    := build/debug
+  CXXFLAGS := -std=c++17 -O0 -g -Wall -Wextra -Wpedantic
+else
+  BUILD    := build
+endif
+EXE  := $(if $(filter Windows_NT,$(OS)),.exe)
 # mingw32-make falls back to cmd.exe when no sh.exe is on PATH (e.g. from PowerShell).
 ifeq ($(SHELL),sh.exe)
   MKDIR = if not exist "$(subst /,\,$(1))" mkdir "$(subst /,\,$(1))"
@@ -37,7 +43,6 @@ $(BUILD)/%.o: %.cpp
 run: all
 	$(call RUN,$(BUILD)/main$(EXE))
 
-debug: CXXFLAGS := -std=c++17 -O0 -g -Wall -Wextra -Wpedantic
 debug: all
 
 clean:

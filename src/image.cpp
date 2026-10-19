@@ -6,15 +6,15 @@
 
 namespace llcv {
 
-Image::Image(int w, int h, int c) : width(w), height(h), channels(c) {
-    if (w <= 0 || h <= 0 || c <= 0) throw std::invalid_argument("Image: dimensions must be positive");
+template <typename T>
+ImageT<T>::ImageT(int w, int h, int c) : width(w), height(h), channels(c) {
+    if (w <= 0 || h <= 0 || c <= 0) throw std::invalid_argument("ImageT: dimensions must be positive");
     data.assign(static_cast<size_t>(w) * h * c, 0);
 }
 
-floatImage::floatImage(int w, int h, int c) : width(w), height(h), channels(c) {
-    if (w <= 0 || h <= 0 || c <= 0) throw std::invalid_argument("floatImage: dimensions must be positive");
-    floatMap.assign(static_cast<size_t>(w) * h * c, 0);
-}
+template struct ImageT<uint8_t>;
+template struct ImageT<float>;
+template struct ImageT<int16_t>;
 
 namespace {
 

@@ -22,7 +22,6 @@ int main(int argc, char** argv) {
         std::printf("Loaded %dx%d, %d channel(s)\n", input.width, input.height, input.channels);
 
         Image output = gaussian_blur(to_grayscale(input), 1);
-        Image canny_unop = canny_atan2(output, 1);
         Image canny_op = canny(output, 1);
         save_pnm(out_path, canny_op);
         std::printf("Wrote %s\n", out_path);
