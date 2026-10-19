@@ -1,5 +1,5 @@
 CXX      ?= g++
-CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic
+CXXFLAGS ?= -std=c++17 -O3 -march=native -Wall -Wextra -Wpedantic
 CPPFLAGS += -Iinclude -MMD -MP
 # Static runtime: avoids picking up a mismatched libstdc++-6.dll from PATH (e.g. Git's).
 LDFLAGS  ?= -static

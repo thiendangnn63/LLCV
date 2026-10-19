@@ -29,9 +29,23 @@ struct Image {
 };
 
 struct floatImage {
-    int height = 0;
     int width = 0;
+    int height = 0;
+    int channels = 0;
     std::vector<float> floatMap;
+
+    floatImage() = default;
+    floatImage(int w, int h, int c);
+
+    bool empty() const { return floatMap.empty(); }
+    size_t size() const { return floatMap.size(); }
+
+    float& at(int x, int y, int c = 0) {
+        return floatMap[(static_cast<size_t>(y) * width + x) * channels + c];
+    }
+    float at(int x, int y, int c = 0) const {
+        return floatMap[(static_cast<size_t>(y) * width + x) * channels + c];
+    }
 };
 
 // Load a binary PGM (P5, 1 channel) or PPM (P6, 3 channels). Throws std::runtime_error.

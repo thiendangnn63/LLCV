@@ -11,6 +11,11 @@ Image::Image(int w, int h, int c) : width(w), height(h), channels(c) {
     data.assign(static_cast<size_t>(w) * h * c, 0);
 }
 
+floatImage::floatImage(int w, int h, int c) : width(w), height(h), channels(c) {
+    if (w <= 0 || h <= 0 || c <= 0) throw std::invalid_argument("floatImage: dimensions must be positive");
+    floatMap.assign(static_cast<size_t>(w) * h * c, 0);
+}
+
 namespace {
 
 // Reads the next whitespace-separated integer from a PNM header, skipping '#' comments.
