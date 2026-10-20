@@ -31,7 +31,7 @@ Measured on 2026-10-18.
 
 Times in ms. "LLCV slower by" compares against single-threaded OpenCV, since LLCV is single-threaded too.
 
-> **Stale:** the `canny` rows (timings and accuracy) were measured before the rewrite that merged non-maximum suppression and thresholding into one pass and dropped `thinMap`. Re-run the benchmark to update them.
+> **Stale:** the `canny` timings were measured before the rewrite that merged non-maximum suppression and thresholding into one pass and dropped `thinMap`. A rerun on 2026-10-20 was too noisy to replace them (every function, OpenCV included, ran about 1.5× slower than on 2026-10-18). The `canny` accuracy row below was re-measured on 2026-10-20 after the rewrite.
 
 ### 640×480 photo
 
@@ -65,7 +65,7 @@ Times in ms. "LLCV slower by" compares against single-threaded OpenCV, since LLC
 | `gaussian_blur` | max diff 1, 3.22% differ | max diff 1, 0.97% differ |
 | `sobel_image` | max diff 3e-5 (float rounding) | max diff 3e-5 (float rounding) |
 | `sobel` | identical | identical |
-| `canny` | edge pixels: 20716 LLCV vs 20728 OpenCV, 0.05% of pixels differ | edge pixels: 108664 LLCV vs 80845 OpenCV, 0.47% of pixels differ |
+| `canny` | edge pixels: 20716 LLCV vs 20728 OpenCV, 0.05% of pixels differ | edge pixels: 108668 LLCV vs 80845 OpenCV, 0.47% of pixels differ |
 
 ### Why the outputs differ
 
